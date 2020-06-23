@@ -3,10 +3,9 @@
 #include <FastLED.h>
 
 MIDI_CREATE_DEFAULT_INSTANCE();
-LiquidCrystal_I2C lcd(0x3F, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 // Number of LEDs over the piano keys
-#define NUM_KEYBOARD_LEDS 73 // With a 60 LED/meter strip and a full size keyboard (122cm), there are 73
+#define NUM_KEYBOARD_LEDS 64 // With a 60 LED/meter strip and a full size keyboard (122cm), there are 73
 
 // Arduino pin controlling the LED strip
 #define DATA_PIN 9
@@ -37,10 +36,10 @@ CRGB leds[NUM_KEYBOARD_LEDS + FIRST_LED];
 // Define an array of colors to use for the led strip
 CRGB colors[NUM_KEYBOARD_LEDS];
 
-uint8_t row = 0;
-uint8_t keysDown = 0;
 bool ledsModified = false;
 unsigned long lastMessageTime = 0;
+
+int updates = 0;
 
 void setup() {
   delay(3000);
@@ -55,10 +54,7 @@ void setup() {
   FastLED.setCorrection(TypicalSMD5050); 
   FastLED.setBrightness(50);
 
-  fill_rainbow(colors, NUM_KEYBOARD_LEDS, 42, 4);
-
-  // Set up lcd for debugging
-  lcd.begin(20, 4);
+  fill_rainbow(colors, NUM_KEYBOARD_LEDS, 42, 9);
 }
 
 void loop() {
@@ -69,53 +65,26 @@ void loop() {
   if (ledsModified && millis() - lastMessageTime > LED_UPDATE_DELAY) {
     FastLED.show();
     ledsModified = false;
-    lcd.setCursor(0, 3);
-    lcd.print("Updated ");
+    updates++;
   }
 }
 
 void onNoteOn(byte channel, byte pitch, byte velocity) {
-  keysDown++;
-
   uint8_t index = map(pitch - FIRST_KEY_PITCH, 0, NUM_KEYS - 1, FIRST_LED, NUM_KEYBOARD_LEDS + FIRST_LED - 1);
   leds[index] = colors[index - FIRST_LED];
-  ledsModified = true;
-
-  unsigned long messageTime = millis();
-  unsigned long noteOnDiff = messageTime - lastMessageTime;
-  lastMessageTime = messageTime;
+  leds[0] = leds[(updates * 8) % NUM_KEYBOARD_LEDS]; // Display number of updates by cycling an unused led through the rainbow
+  leds[1] = leds[index]; // Show the last led to be colored
   
-  String data = String("P: ") + pitch + ", T: " + noteOnDiff;
-
-  lcd.setCursor(0, row);
-  lcd.print("                    ");
-  lcd.setCursor(0, row);
-  lcd.print(data);
-
-  if (row == 2) {
-    row = 0;
-  }
-  else {
-    row++;
-  }
-
-  lcd.setCursor(0, 3);
-  lcd.print("Modified");
-  lcd.setCursor(18, 3);
-  lcd.print(keysDown);
+  ledsModified = true;
+  lastMessageTime = millis();
 }
 
 void onNoteOff(byte channel, byte pitch, byte velocity) {
-  keysDown--;
-
   uint8_t index = map(pitch - FIRST_KEY_PITCH, 0, NUM_KEYS - 1, FIRST_LED, NUM_KEYBOARD_LEDS + FIRST_LED - 1);
+  leds[4] = leds[(updates * 8) % NUM_KEYBOARD_LEDS];
+  leds[5] = leds[index];
   leds[index] = CRGB::Black;
-  ledsModified = true;
-
-  lastMessageTime = millis();
   
-  lcd.setCursor(0, 3);
-  lcd.print("Modified");  
-  lcd.setCursor(18, 3);
-  lcd.print(keysDown);
-}
+  ledsModified = true;
+  lastMessageTime = millis();
+ }
