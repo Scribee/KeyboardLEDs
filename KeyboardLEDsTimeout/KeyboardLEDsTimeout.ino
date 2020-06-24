@@ -20,7 +20,7 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 
 /*
  Amount of time in ms to wait after the last MIDI message has been received before updating the LED strip.
- The minimum time in which messages can be processed with my setup is 33ms.
+ The minimum time in which messages can be processed with my setup is ~25ms.
  My glissandos usually produce noteOn messages with 70-90ms between them, while fast grace notes or trills can produce messages with even shorter intervals.
  My regular playing does not ever seem to cause MIDI messages to be sent more frequently than every 100ms.
  
@@ -28,16 +28,13 @@ MIDI_CREATE_DEFAULT_INSTANCE();
  This way the expensive FastLED.show() doesn't have to be run between processing each note in a chord that should be processed at once.
  Without limiting this, the arduino can sometimes 'miss' subsequent MIDI messages from notes played in very quick succession while busy updating the LEDs for the first received message. 
 */
-#define LED_UPDATE_DELAY 39
+#define LED_UPDATE_DELAY 29
 
 CRGB leds[NUM_KEYBOARD_LEDS + FIRST_LED]; // Array to store the color of each LED in the strip
 CRGB colors[NUM_KEYBOARD_LEDS]; // Array of colors to be used in leds*
 
 bool ledsModified = false;
 unsigned long lastMessageTime = 0;
-
-// Used for debugging
-int updates = 0; // Number of times FastLED.show() has been called
 
 void setup() {
   delay(3000);
@@ -63,42 +60,36 @@ void loop() {
   if (ledsModified && millis() - lastMessageTime > LED_UPDATE_DELAY) {
     FastLED.show(); // 'Push' the new leds* to the LED strip, updating which LEDs are on
     ledsModified = false;
-    
-    updates++;
   }
 }
 
 /*
  * Handler for NoteOn MIDI messages.
- * Using the pitch of the pressed key, the index of the closest LED is calculated and given a color.
  */
 void onNoteOn(byte channel, byte pitch, byte velocity) {
-  byte index = map(pitch - FIRST_KEY_PITCH, 0, NUM_KEYS - 1, FIRST_LED, NUM_KEYBOARD_LEDS + FIRST_LED - 1); // Calculate index of LED that lines up with the pressed key
-  leds[index] = colors[index - FIRST_LED]; // 'Turn on' that LED by giving it a color from the rainbow array
-  
-  ledsModified = true; // Remember that the LEDs have been changed since the last update
-  lastMessageTime = millis(); // Remember the time this keypress was processed
-
-  /* -Debugging- */
-  leds[0] = colors[(updates * 5) % NUM_KEYBOARD_LEDS]; // Display number of updates by cycling the unused first led through the rainbow
-  leds[1] = leds[index]; // Also show the last led to be colored
-  /* ----------- */
+  setLED(pitch - FIRST_KEY_PITCH, true);
 }
 
 /*
  * Handler for NoteOff MIDI messages.
- * Using the pitch of the lifted key, the index of the closest LED is calculated and set to black.
  */
 void onNoteOff(byte channel, byte pitch, byte velocity) {
-  byte index = map(pitch - FIRST_KEY_PITCH, 0, NUM_KEYS - 1, FIRST_LED, NUM_KEYBOARD_LEDS + FIRST_LED - 1); // Calculate index of LED that lines up with the pressed key
+  setLED(pitch - FIRST_KEY_PITCH, false);
+}
+
+/*
+ * Using the index of the pressed or released key, the index of the closest LED is calculated and given a color or set to black.
+ */
+void setLED(byte keyIndex, bool turningOn) {
+  byte index = map(keyIndex, 0, NUM_KEYS - 1, FIRST_LED, NUM_KEYBOARD_LEDS + FIRST_LED - 1); // Calculate index of LED that lines up with key
   
-  /* -Debugging- */
-  leds[4] = colors[(updates * 5) % NUM_KEYBOARD_LEDS];  // Display number of updates by cycling the unused fifth led through the rainbow
-  leds[5] = leds[index]; // Also show the color of the LED just turned off
-  /* ----------- */
-  
-  leds[index] = CRGB::Black; // 'Turn off' the LED by setting its color to black
-  
+  if (turningOn) {
+    leds[index] = colors[index - FIRST_LED]; // 'Turn on' that LED by giving it a color from the rainbow array
+  }
+  else {
+    leds[index] = CRGB::Black; // 'Turn off' the LED by setting its color to black
+  }
+
   ledsModified = true; // Remember that the LEDs have been changed since the last update
   lastMessageTime = millis(); // Remember the time this keypress was processed
- }
+}
