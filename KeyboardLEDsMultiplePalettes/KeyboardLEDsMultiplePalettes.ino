@@ -30,18 +30,24 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 */
 #define LED_UPDATE_DELAY 29
 
+#define NUM_PALETTES 4
+
 CRGB leds[NUM_KEYBOARD_LEDS + FIRST_LED]; // Array to store the color of each LED in the strip
-CRGB colors[NUM_KEYBOARD_LEDS]; // Array of colors to be used in leds*
+CRGB colors[NUM_PALETTES][NUM_KEYBOARD_LEDS]; // Array of colors to be used in leds*
 
 bool ledsModified = false;
 unsigned long lastMessageTime = 0;
 
+byte palette = 0;
+
 void setup() {
   delay(3000);
 
-  // Set up MIDI handler
+  // Set up MIDI handlers
   MIDI.setHandleNoteOn(onNoteOn); // Specify function to call on reception of a NoteOn command
-  MIDI.setHandleNoteOff(onNoteOff); // Do the same for NoteOffs
+  MIDI.setHandleNoteOff(onNoteOff);
+  MIDI.setHandleControlChange(onControlChange);
+   
   MIDI.begin(MIDI_CHANNEL_OMNI); // Initiate MIDI communication, listen to all channels
 
   // Set up the LED strip
@@ -49,8 +55,11 @@ void setup() {
   FastLED.setCorrection(TypicalSMD5050); // Set color correction to remove greenish tint
   FastLED.setBrightness(50); // Up to 255
 
-  // Fill the colors array with a rainbow
-  fill_rainbow(colors, NUM_KEYBOARD_LEDS, 42, 9);
+  // Fill each with a different palette
+  fill_rainbow(colors[0], NUM_KEYBOARD_LEDS, 42, 9);
+  fill_solid(colors[1], NUM_KEYBOARD_LEDS, CRGB::Purple);
+  fill_rainbow(colors[2], NUM_KEYBOARD_LEDS, 1, 4);
+  fill_rainbow(colors[3], NUM_KEYBOARD_LEDS, 127, 4);
 }
 
 void loop() {
@@ -60,6 +69,20 @@ void loop() {
   if (ledsModified && millis() - lastMessageTime > LED_UPDATE_DELAY) {
     FastLED.show(); // 'Push' the new leds* to the LED strip, updating which LEDs are on
     ledsModified = false;
+  }
+}
+
+/*
+ * Handler for MIDI CC messages, in this case pedal presses.
+ * Damper pedal: N:64, V:127 (On), 0 (Off)
+ * Sostenuto pedal: N:66
+ * Soft pedal: N:67
+ * Sends on channels 1, 2 and 3 for some reason
+ */
+void onControlChange(byte channel, byte number, byte value) {
+  // Only listen to soft pedal down messages on channel 1
+  if (channel == 1 && number == 67 && value == 127) {
+    palette = (palette + 1) % NUM_PALETTES; // Cycle to the next palette
   }
 }
 
@@ -84,7 +107,7 @@ void setLED(byte keyIndex, bool turningOn) {
   byte index = map(keyIndex, 0, NUM_KEYS - 1, FIRST_LED, NUM_KEYBOARD_LEDS + FIRST_LED - 1); // Calculate index of LED that lines up with key
   
   if (turningOn) {
-    leds[index] = colors[index - FIRST_LED]; // 'Turn on' that LED by giving it a color from the rainbow array
+    leds[index] = colors[palette][index - FIRST_LED]; // 'Turn on' that LED by giving it a color from the rainbow array
   }
   else {
     leds[index] = CRGB::Black; // 'Turn off' the LED by setting its color to black
